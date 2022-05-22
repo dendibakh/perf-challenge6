@@ -3,7 +3,6 @@
 2. Add quickstart for Linux and Windows
 3. Run clang-format
 4. Add readme
-5. Support create_small.sh for windows
 
 Inspired by https://github.com/juditacs/wordcount/
 
