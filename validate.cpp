@@ -32,8 +32,8 @@ bool validateOneInputFile(const fs::path &filePath, const fs::path &refPath) {
     return false;
   }
 
-  auto refResult = parseRefOut(outRefFilePath);
-  auto result = wordcount(filePath);
+  auto refResult = parseRefOut(outRefFilePath.string());
+  auto result = wordcount(filePath.string());
 
   // dump result for post-checking
   std::string outResFilePath = testFileName + ".out";
