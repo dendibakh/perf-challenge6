@@ -1,12 +1,4 @@
-# TODO:
-1. Check on windows
-2. Add quickstart for Linux and Windows
-3. Run clang-format
-4. Add readme
-
-
-
-# Performance Challenge #5
+# Performance Challenge #6
 TODO: describe the challenge.
 
 # How to set up the environment
