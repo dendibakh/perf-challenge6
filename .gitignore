@@ -20,3 +20,6 @@ build
 results.json
 /tools/benchmark/
 /bzip2
+/data/large.data
+/data/small.data
+/ref/small.out

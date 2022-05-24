@@ -19,4 +19,3 @@ rm huwiki-latest-pages-meta-current.xml.bz2
 
 bzip2/bzip2.exe -d small-ref.bz2
 mv small-ref ref/small.out
-rm small-ref.bz2
