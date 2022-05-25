@@ -14,6 +14,8 @@ art     1
 pear    1
 ```
 
+See additional rules and assumptions in [wordcount.cpp](wordcount.cpp).
+
 # How to set up the environment
 
 Here is the list of tools you *absolutely* have to install to build labs in this video course:
