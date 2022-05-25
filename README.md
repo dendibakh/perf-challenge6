@@ -1,5 +1,18 @@
 # Performance Challenge #6
-TODO: describe the challenge.
+
+See the announcement post [here](TODO: link).
+
+# The task
+
+The task is to split a text and count each word's frequency, then print the list sorted by frequency in decreasing order. Ties are printed in alphabetical order.
+
+Example:
+```bash
+$ echo "apple pear apple art" | ./wordcount.exe
+apple   2
+art     1
+pear    1
+```
 
 # How to set up the environment
 
@@ -33,6 +46,8 @@ $ cmake --build . --target benchmarkLab
 ```bash
 $ python3 check_speedup.py -challenge_path path/to/repo -bench_lib_path ~/workspace/benchmark/benchmark -num_runs 3
 ```
+
+Keep in mind, the large input file is *very* large. We recommend having at least 8GB RAM.
 
 # Acknowledgments
 - Inspired by https://github.com/juditacs/wordcount/

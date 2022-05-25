@@ -4,8 +4,15 @@
 #include <fstream>
 #include <iostream>
 
-// Some additional rules:
-// function MUST read input
+// Assumptions
+// 1. function should read the input from the file, i.e. caching the input is not allowed
+// 2. the input is always encoded in UTF-8
+// 3. break only on space, tab and newline (do not break on non-breaking space)
+// 4. sort words by frequency AND secondary sort in alphabetical order
+
+// Implementation rules
+// 1. You can add new files but dependencies are generally not allowed unless it is a header-only library
+// 2. Your submission must be single-threaded, however feel free to implement multi-threaded version (optional).
 
 #ifdef SOLUTION
 //
