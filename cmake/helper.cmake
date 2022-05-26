@@ -65,13 +65,13 @@ list(FILTER srcs EXCLUDE REGEX ".*bench.cpp$")
 list(FILTER srcs EXCLUDE REGEX ".*validate.cpp$")
 
 # Add main targets
-add_executable(lab bench.cpp ${srcs} ${EXT_LAB_srcs})
-add_executable(validate validate.cpp ${srcs} ${EXT_VALIDATE_srcs})
+add_executable(wordcount bench.cpp ${srcs} ${EXT_BENCHMARK_srcs})
+add_executable(validate_wordcount validate.cpp ${srcs} ${EXT_VALIDATE_srcs})
 
 # Add path to a local benchmark library
 if(EXISTS "${BENCHMARK_FOLDER}/include")
-  target_include_directories(lab BEFORE PRIVATE "${BENCHMARK_FOLDER}/include")
-  target_include_directories(validate BEFORE PRIVATE "${BENCHMARK_FOLDER}/include")
+  target_include_directories(wordcount BEFORE PRIVATE "${BENCHMARK_FOLDER}/include")
+  target_include_directories(validate_wordcount BEFORE PRIVATE "${BENCHMARK_FOLDER}/include")
 endif()
 
 # Check optional arguments
@@ -81,79 +81,79 @@ endif()
 if(NOT DEFINED VALIDATE_ARGS)
   set(VALIDATE_ARGS "")
 endif()
-if(NOT DEFINED LAB_ARGS)
-  set(LAB_ARGS "")
+if(NOT DEFINED BENCHMARK_ARGS)
+  set(BENCHMARK_ARGS "")
 endif()
 
 if("${BENCHMARK_MIN_TIME}" STREQUAL "")
   set(BENCHMARK_MIN_TIME "1")
 endif()
-set(LAB_BENCHMARK_ARGS --benchmark_min_time=${BENCHMARK_MIN_TIME} --benchmark_out_format=json --benchmark_out=result.json)
+set(BENCHMARK_BENCHMARK_ARGS --benchmark_min_time=${BENCHMARK_MIN_TIME} --benchmark_out_format=json --benchmark_out=result.json)
 
 if(CI)
   # Add CI targets without dependencies
   get_property(isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
   if(isMultiConfig)
-    add_custom_target(validateLab
-      COMMAND ${PROJECT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/validate ${VALIDATE_ARGS}
+    add_custom_target(validate
+      COMMAND ${PROJECT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/validate_wordcount ${VALIDATE_ARGS}
       VERBATIM)
 
-    add_custom_target(benchmarkLab
-      COMMAND ${PROJECT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/lab ${LAB_ARGS} ${LAB_BENCHMARK_ARGS}
+    add_custom_target(benchmark
+      COMMAND ${PROJECT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/wordcount ${BENCHMARK_ARGS} ${BENCHMARK_BENCHMARK_ARGS}
       VERBATIM)
   else()
-    add_custom_target(validateLab
-      COMMAND ${PROJECT_BINARY_DIR}/validate ${VALIDATE_ARGS}
+    add_custom_target(validate
+      COMMAND ${PROJECT_BINARY_DIR}/validate_wordcount ${VALIDATE_ARGS}
       VERBATIM)
 
-    add_custom_target(benchmarkLab
-      COMMAND ${PROJECT_BINARY_DIR}/lab ${LAB_ARGS} ${LAB_BENCHMARK_ARGS}
+    add_custom_target(benchmark
+      COMMAND ${PROJECT_BINARY_DIR}/wordcount ${BENCHMARK_ARGS} ${BENCHMARK_BENCHMARK_ARGS}
       VERBATIM)
   endif()
 else()
   # Add robust execution targets
-  add_custom_target(validateLab
-    COMMAND validate ${VALIDATE_ARGS}
+  add_custom_target(validate
+    COMMAND validate_wordcount ${VALIDATE_ARGS}
     VERBATIM)
 
-  add_custom_target(benchmarkLab
-    COMMAND lab ${LAB_ARGS} ${LAB_BENCHMARK_ARGS}
+  add_custom_target(benchmark
+    COMMAND wordcount ${BENCHMARK_ARGS} ${BENCHMARK_BENCHMARK_ARGS}
     VERBATIM)
 endif()
 
 # Other settings
 if(NOT MSVC)
   if (WIN32)
-    target_link_libraries(lab ${BENCHMARK_LIBRARY} shlwapi)
-    target_link_libraries(validate ${BENCHMARK_LIBRARY} shlwapi)
+    target_link_libraries(wordcount ${BENCHMARK_LIBRARY} shlwapi)
+    target_link_libraries(validate_wordcount ${BENCHMARK_LIBRARY} shlwapi)
   else()
-    target_link_libraries(lab ${BENCHMARK_LIBRARY} pthread m)
-    target_link_libraries(validate ${BENCHMARK_LIBRARY} pthread m)
+    target_link_libraries(wordcount ${BENCHMARK_LIBRARY} pthread m)
+    target_link_libraries(validate_wordcount ${BENCHMARK_LIBRARY} pthread m)
   endif()
 
   # MinGW
   if(MINGW)
-    target_link_libraries(lab shlwapi)
-    target_link_libraries(validate shlwapi)
+    target_link_libraries(wordcount shlwapi)
+    target_link_libraries(validate_wordcount shlwapi)
   endif()
 else()
   find_library(BENCHMARK_LIBRARYD NAMES benchmark PATHS "${BENCHMARK_FOLDER}/build/src/Debug")
 
-  target_link_libraries(lab Shlwapi.lib optimized ${BENCHMARK_LIBRARY} debug ${BENCHMARK_LIBRARYD})
-  target_link_libraries(validate Shlwapi.lib optimized ${BENCHMARK_LIBRARY} debug ${BENCHMARK_LIBRARYD})
+  target_link_libraries(wordcount Shlwapi.lib optimized ${BENCHMARK_LIBRARY} debug ${BENCHMARK_LIBRARYD})
+  target_link_libraries(validate_wordcount Shlwapi.lib optimized ${BENCHMARK_LIBRARY} debug ${BENCHMARK_LIBRARYD})
 
-  set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT lab)
+  set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT wordcount)
 
-  string(REPLACE ";" " " LAB_ARGS_STR "${LAB_ARGS}")
+  string(REPLACE ";" " " BENCHMARK_ARGS_STR "${BENCHMARK_ARGS}")
   string(REPLACE ";" " " VALIDATE_ARGS_STR "${VALIDATE_ARGS}")
 
   # Since CMake 3.13.0
-  set_property(TARGET lab PROPERTY VS_DEBUGGER_COMMAND_ARGUMENTS "${LAB_ARGS_STR}")
-  set_property(TARGET validate PROPERTY VS_DEBUGGER_COMMAND_ARGUMENTS "${VALIDATE_ARGS_STR}")
+  set_property(TARGET wordcount PROPERTY VS_DEBUGGER_COMMAND_ARGUMENTS "${BENCHMARK_ARGS_STR}")
+  set_property(TARGET validate_wordcount PROPERTY VS_DEBUGGER_COMMAND_ARGUMENTS "${VALIDATE_ARGS_STR}")
 
   # Hide helper projects
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-  set_target_properties(validateLab PROPERTIES FOLDER CI)
-  set_target_properties(benchmarkLab PROPERTIES FOLDER CI)
+  set_target_properties(validate_wordcount PROPERTIES FOLDER CI)
+  set_target_properties(benchmark PROPERTIES FOLDER CI)
 endif()

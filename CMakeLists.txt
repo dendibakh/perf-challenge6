@@ -6,10 +6,10 @@ project(wordcount)
 # set(VALIDATE_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/data/test")
 
 # 2. RUN QUICK EXPERIMENTS ON SMALL INPUT FILE
-# set(LAB_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/data/small.data")
+# set(BENCHMARK_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/data/small.data")
 
 # 3. FOR SUBMISSION USE LARGE INPUT FILE FOR BENCHMARKING
-set(LAB_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/data/large.data")
+set(BENCHMARK_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/data/large.data")
 set(VALIDATE_ARGS "${CMAKE_CURRENT_SOURCE_DIR}/data/small.data")
 
 # We do not validate your code on large data file,

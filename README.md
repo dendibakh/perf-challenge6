@@ -36,12 +36,12 @@ $ cmake --build . --config Release --parallel 8
 
 **Validate:**
 ```bash
-$ cmake --build . --target validateLab
+$ cmake --build . --target validate
 ```
 
 **Benchmark:**
 ```bash
-$ cmake --build . --target benchmarkLab
+$ cmake --build . --target benchmark
 ```
 
 **Benchmark against baseline:**
