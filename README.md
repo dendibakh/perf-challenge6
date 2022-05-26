@@ -1,6 +1,6 @@
 # Performance Challenge #6
 
-See the announcement post [here](TODO: link).
+See the announcement post [here](https://easyperf.net/blog/2022/05/28/Performance-analysis-and-tuning-contest-6).
 
 # The task
 
