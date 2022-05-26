@@ -18,7 +18,7 @@ See additional rules and assumptions in [wordcount.cpp](wordcount.cpp).
 
 # How to set up the environment
 
-Here is the list of tools you *absolutely* have to install to build labs in this video course:
+Here is the list of tools you *absolutely* have to install to build the benchmark:
 * CMake 3.13 or higher
 * [Google benchmark](https://github.com/google/benchmark).
 
