@@ -15,6 +15,11 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Prepare
+      shell: bash
+      working-directory: ${{github.workspace}}
+      run: ./create_input.sh
+
     - name: Benchmark
       shell: bash
       working-directory: ${{github.workspace}}
