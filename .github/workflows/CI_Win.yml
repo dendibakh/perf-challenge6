@@ -1,0 +1,22 @@
+name: Benchmark on Windows
+
+on: [push]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 10
+    
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Benchmark
+      shell: powershell
+      working-directory: ${{github.workspace}}
+      run: python buildbot\runCI.py -workdir ${{github.workspace}}
+
