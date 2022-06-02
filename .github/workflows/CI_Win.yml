@@ -8,15 +8,20 @@ env:
 jobs:
   build:
     runs-on: [self-hosted, windows]
-    timeout-minutes: 10
+    timeout-minutes: 20
     
     steps:
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
 
+    - name: Prepare
+      shell: powershell
+      working-directory: ${{github.workspace}}
+      run: cp ../../../small.data data/ ; cp ../../../large.data data/ ; ../../../bzip2/bzip2.exe -d small-ref.bz2 ; mv small-ref ref/small.out
+
     - name: Benchmark
       shell: powershell
       working-directory: ${{github.workspace}}
-      run: python buildbot\runCI.py -workdir ${{github.workspace}}
+      run: python buildbot\runCI.py -workdir "${{github.workspace}}"
 

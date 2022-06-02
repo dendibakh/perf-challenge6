@@ -36,9 +36,9 @@ args = parser.parse_args()
 workdir = args.workdir
 verbose = args.v
 
-def buildAndValidate(buildDir, cmakeCxxFlags):
+def buildAndValidate(buildDir, solutionOrBaseline, cmakeCxxFlags):
   try:
-    subprocess.check_call("cmake -E make_directory " + buildDir, shell=True)
+    subprocess.check_call("cmake -E make_directory build_" + solutionOrBaseline, shell=True)
     print("Prepare build directory - OK")
   except:
     print(bcolors.FAIL + "Prepare build directory - Failed" + bcolors.ENDC)
@@ -48,9 +48,9 @@ def buildAndValidate(buildDir, cmakeCxxFlags):
 
   try:
     if sys.platform != 'win32':
-      subprocess.check_call("cmake -DCMAKE_BUILD_TYPE=Release " + cmakeCxxFlags + " " + os.path.join(buildDir, ".."), shell=True)
+      subprocess.check_call("cmake -DCMAKE_BUILD_TYPE=Release " + cmakeCxxFlags + " \"" + os.path.join(buildDir, "..") + "\"", shell=True)
     else:
-      subprocess.check_call("cmake -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release " + cmakeCxxFlags + " " + os.path.join(buildDir, ".."), shell=True)
+      subprocess.check_call("cmake -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release " + cmakeCxxFlags + " \"" + os.path.join(buildDir, "..") + "\"", shell=True)
     print("CMake - OK")
   except:
     print(bcolors.FAIL + "CMake - Failed" + bcolors.ENDC)
@@ -77,7 +77,7 @@ def build(workdir, solutionOrBaseline, cmakeCxxFlags):
   os.chdir(workdir)
   buildDir = os.path.join(workdir, "build_" + solutionOrBaseline)
   print("Build and Validate the " + solutionOrBaseline)
-  if not buildAndValidate(buildDir, cmakeCxxFlags):
+  if not buildAndValidate(buildDir, solutionOrBaseline, cmakeCxxFlags):
     return False
 
   return True
@@ -113,7 +113,7 @@ def getSpeedUp(diff_report):
 def benchmarkSolutionOrBaseline(buildDir, solutionOrBaseline):
   os.chdir(buildDir)
   try:
-    subprocess.check_call("cmake --build " + buildDir + " --config Release --target benchmark", shell=True)
+    subprocess.check_call("cmake --build . --config Release --target benchmark", shell=True)
     print("Benchmarking " + solutionOrBaseline + " - OK")
   except:
     print(bcolors.FAIL + "Benchmarking " + solutionOrBaseline + " - Failed" + bcolors.ENDC)
@@ -144,12 +144,12 @@ def benchmark(workdir):
     print(ln)
 
   speedup = getSpeedUp(diff_report)
-  if abs(speedup) < 2.0:
-    print (bcolors.FAIL + "New version has performance similar to the baseline (<2% difference). Submission failed." + bcolors.ENDC)
-    return False
   if speedup < 0:
     print (bcolors.FAIL + "New version is slower. Submission failed." + bcolors.ENDC)
     return False
+  if abs(speedup) < 2.0:
+    print (bcolors.FAIL + "New version has performance similar to the baseline (<2% difference). Submission failed." + bcolors.ENDC)
+    return True
 
   print (bcolors.OKGREEN + "Measured speedup:", "{:.2f}".format(speedup), "%" + bcolors.ENDC)
   return True
