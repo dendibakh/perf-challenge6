@@ -49,7 +49,7 @@ cmake --build . --target benchmark
 python3 check_speedup.py -challenge_path path/to/repo -bench_lib_path ~/workspace/benchmark/benchmark -num_runs 3
 ```
 
-Keep in mind, the large input file is *very* large. We recommend having at least 8GB RAM.
+Keep in mind, the large input file is *very* large. We recommend having at least 16GB RAM.
 
 # Acknowledgments
 - Inspired by https://github.com/juditacs/wordcount/
