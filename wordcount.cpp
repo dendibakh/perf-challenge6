@@ -29,7 +29,9 @@ std::vector<WordCount> wordcount(std::string filePath) {
 
   std::ifstream inFile{filePath};
   if (!inFile) {
-    std::cerr << "Invalid input file: " << filePath << "\n";
+    // just to force a compiler to generate different binaries
+    // and enforce benchmarking    
+    std::cerr << "BLA BLA BLA Invalid input file: " << filePath << "\n";
     return mvec;
   }
 
