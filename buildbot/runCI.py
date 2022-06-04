@@ -125,11 +125,11 @@ def benchmark(workdir):
 
   print("Benchmark solution against the baseline")
 
+  benchmarkSolutionOrBaseline("build_solution", "solution")
+  benchmarkSolutionOrBaseline("build_baseline", "baseline")
+
   solutionDir = os.path.join(workdir, "build_solution")
   baselineDir = os.path.join(workdir, "build_baseline")
-
-  benchmarkSolutionOrBaseline(solutionDir, "solution")
-  benchmarkSolutionOrBaseline(baselineDir, "baseline")
 
   outJsonSolution = gbench.util.load_benchmark_results(os.path.join(solutionDir, "result.json"))
   outJsonBaseline = gbench.util.load_benchmark_results(os.path.join(baselineDir, "result.json"))
