@@ -23,5 +23,5 @@ jobs:
     - name: Benchmark
       shell: powershell
       working-directory: ${{github.workspace}}
-      run: python buildbot\runCI.py -workdir ${{github.workspace}}
+      run: python buildbot\runCI.py -workdir "${{github.workspace}}"
 
