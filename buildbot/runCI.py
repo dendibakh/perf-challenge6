@@ -36,9 +36,9 @@ args = parser.parse_args()
 workdir = args.workdir
 verbose = args.v
 
-def buildAndValidate(buildDir, cmakeCxxFlags):
+def buildAndValidate(buildDir, solutionOrBaseline, cmakeCxxFlags):
   try:
-    subprocess.check_call("cmake -E make_directory " + buildDir, shell=True)
+    subprocess.check_call("cmake -E make_directory build_" + solutionOrBaseline, shell=True)
     print("Prepare build directory - OK")
   except:
     print(bcolors.FAIL + "Prepare build directory - Failed" + bcolors.ENDC)
