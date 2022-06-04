@@ -77,7 +77,7 @@ def build(workdir, solutionOrBaseline, cmakeCxxFlags):
   os.chdir(workdir)
   buildDir = os.path.join(workdir, "build_" + solutionOrBaseline)
   print("Build and Validate the " + solutionOrBaseline)
-  if not buildAndValidate(buildDir, cmakeCxxFlags):
+  if not buildAndValidate(buildDir, solutionOrBaseline, cmakeCxxFlags):
     return False
 
   return True
