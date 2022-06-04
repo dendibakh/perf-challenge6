@@ -48,9 +48,9 @@ def buildAndValidate(buildDir, solutionOrBaseline, cmakeCxxFlags):
 
   try:
     if sys.platform != 'win32':
-      subprocess.check_call("cmake -DCMAKE_BUILD_TYPE=Release " + cmakeCxxFlags + " " + os.path.join(buildDir, ".."), shell=True)
+      subprocess.check_call("cmake -DCMAKE_BUILD_TYPE=Release " + cmakeCxxFlags + " \"" + os.path.join(buildDir, "..") + "\"", shell=True)
     else:
-      subprocess.check_call("cmake -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release " + cmakeCxxFlags + " " + os.path.join(buildDir, ".."), shell=True)
+      subprocess.check_call("cmake -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release " + cmakeCxxFlags + " \"" + os.path.join(buildDir, "..") + "\"", shell=True)
     print("CMake - OK")
   except:
     print(bcolors.FAIL + "CMake - Failed" + bcolors.ENDC)
