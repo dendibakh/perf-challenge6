@@ -113,7 +113,7 @@ def getSpeedUp(diff_report):
 def benchmarkSolutionOrBaseline(buildDir, solutionOrBaseline):
   os.chdir(buildDir)
   try:
-    subprocess.check_call("cmake --build " + buildDir + " --config Release --target benchmark", shell=True)
+    subprocess.check_call("cmake --build " + "build_" + solutionOrBaseline + " --config Release --target benchmark", shell=True)
     print("Benchmarking " + solutionOrBaseline + " - OK")
   except:
     print(bcolors.FAIL + "Benchmarking " + solutionOrBaseline + " - Failed" + bcolors.ENDC)
@@ -125,11 +125,11 @@ def benchmark(workdir):
 
   print("Benchmark solution against the baseline")
 
-  benchmarkSolutionOrBaseline("build_solution", "solution")
-  benchmarkSolutionOrBaseline("build_baseline", "baseline")
-
   solutionDir = os.path.join(workdir, "build_solution")
   baselineDir = os.path.join(workdir, "build_baseline")
+
+  benchmarkSolutionOrBaseline(solutionDir, "solution")
+  benchmarkSolutionOrBaseline(baselineDir, "baseline")
 
   outJsonSolution = gbench.util.load_benchmark_results(os.path.join(solutionDir, "result.json"))
   outJsonBaseline = gbench.util.load_benchmark_results(os.path.join(baselineDir, "result.json"))
