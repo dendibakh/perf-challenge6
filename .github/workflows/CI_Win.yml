@@ -18,7 +18,7 @@ jobs:
     - name: Prepare
       shell: powershell
       working-directory: ${{github.workspace}}
-      run: cp ../../../small.data data/ ; cp ../../../large.data data/ ; bzip2/bzip2.exe -d small-ref.bz2 ; mv small-ref ref/small.out
+      run: cp ../../../small.data data/ ; cp ../../../large.data data/ ; ../../../bzip2/bzip2.exe -d small-ref.bz2 ; mv small-ref ref/small.out
 
     - name: Benchmark
       shell: powershell
