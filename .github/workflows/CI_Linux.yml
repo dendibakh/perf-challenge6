@@ -18,7 +18,7 @@ jobs:
     - name: Prepare
       shell: bash
       working-directory: ${{github.workspace}}
-      run: ./create_input.sh
+      run: cp ../../../small.data ${{github.workspace}}/data ; cp ../../../large.data ${{github.workspace}}/data ; bunzip2 small-ref.bz2 && mv small-ref ref/small.out
 
     - name: Benchmark
       shell: bash
