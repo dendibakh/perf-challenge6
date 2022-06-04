@@ -113,7 +113,7 @@ def getSpeedUp(diff_report):
 def benchmarkSolutionOrBaseline(buildDir, solutionOrBaseline):
   os.chdir(buildDir)
   try:
-    subprocess.check_call("cmake --build " + "build_" + solutionOrBaseline + " --config Release --target benchmark", shell=True)
+    subprocess.check_call("cmake --build . --config Release --target benchmark", shell=True)
     print("Benchmarking " + solutionOrBaseline + " - OK")
   except:
     print(bcolors.FAIL + "Benchmarking " + solutionOrBaseline + " - Failed" + bcolors.ENDC)
