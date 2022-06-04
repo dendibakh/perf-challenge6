@@ -144,12 +144,12 @@ def benchmark(workdir):
     print(ln)
 
   speedup = getSpeedUp(diff_report)
-  if abs(speedup) < 2.0:
-    print (bcolors.FAIL + "New version has performance similar to the baseline (<2% difference). Submission failed." + bcolors.ENDC)
-    return False
   if speedup < 0:
     print (bcolors.FAIL + "New version is slower. Submission failed." + bcolors.ENDC)
     return False
+  if abs(speedup) < 2.0:
+    print (bcolors.FAIL + "New version has performance similar to the baseline (<2% difference). Submission failed." + bcolors.ENDC)
+    return True
 
   print (bcolors.OKGREEN + "Measured speedup:", "{:.2f}".format(speedup), "%" + bcolors.ENDC)
   return True
