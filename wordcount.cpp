@@ -16,11 +16,14 @@
 // is a header-only library.
 // 2. Your submission must be single-threaded, however feel free to implement
 // multi-threaded version (optional).
-
 #ifdef SOLUTION
-//
-// Your solution here.
-//
+
+#include "solver_af.h"
+
+std::vector<WordCount> wordcount(std::string filePath) {
+  return wordcount_af(filePath);
+}
+
 #else
 // Baseline solution.
 // Do not change it - you can use for quickly checking speedups
