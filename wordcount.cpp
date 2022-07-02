@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include "FastWordCounter.h"
 
 // Assumptions
 // 1. Function should read the input from the file, i.e. caching the input is
@@ -17,10 +18,16 @@
 // 2. Your submission must be single-threaded, however feel free to implement
 // multi-threaded version (optional).
 
+char* WordEntry::s_basePtr = nullptr;
 #ifdef SOLUTION
-//
-// Your solution here.
-//
+FastWordCounter fastWordCounter;
+
+std::vector<WordCount> wordcount(std::string filePath) {
+  std::vector<WordCount> mvec;
+  fastWordCounter.run(filePath, mvec);
+
+  return mvec;
+}
 #else
 // Baseline solution.
 // Do not change it - you can use for quickly checking speedups

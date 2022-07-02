@@ -1,3 +1,5 @@
+#ifndef WORD_COUNT_H
+#define WORD_COUNT_H
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -22,5 +24,6 @@ struct WordCount {
     return lh.count != rh.count || lh.word != rh.word;
   }
 };
-
 std::vector<WordCount> wordcount(std::string fileName);
+
+#endif /* WORD_COUNT_H */
