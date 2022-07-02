@@ -1,0 +1,2 @@
+The following must be executed prior to running the code.
+hugeadm --pool-pages-min 2M:4096

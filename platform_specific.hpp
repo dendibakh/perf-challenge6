@@ -66,4 +66,7 @@ void* getDataPtr(const std::string& filePath)
   
   return buf;
 }
+
+void enable_large_pages(void)
+{}
 #endif
