@@ -5,9 +5,11 @@
 #include <iostream>
 
 #include <string_view>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#ifndef _WIN32
+  #include <sys/mman.h>
+  #include <sys/stat.h>
+  #include <fcntl.h>
+#endif
 
 // Assumptions
 // 1. Function should read the input from the file, i.e. caching the input is
@@ -22,7 +24,6 @@
 // 2. Your submission must be single-threaded, however feel free to implement
 // multi-threaded version (optional).
 
-
 #ifdef SOLUTION
 using phmap::flat_hash_map;
 
@@ -30,7 +31,7 @@ std::vector<WordCount> wordcount(std::string filePath) {
   flat_hash_map<std::string, int> m;
 
   std::vector<WordCount> mvec;
-
+#ifndef _WIN32
   int fd = open(filePath.c_str(), O_RDONLY);
   if (fd<0)
     std::cerr << "file open error\n";
@@ -59,17 +60,31 @@ std::vector<WordCount> wordcount(std::string filePath) {
     }
     std::advance(curr, 1);
   }
+
   std::string s = std::string{&*begin, static_cast<std::size_t>(curr - begin)};
   if (!isspace(s[0]) && !s.empty()) {
     m[s]++;
   }
+#else // _WIN32
+  std::ifstream inFile{filePath};
+  if (!inFile) {
+    std::cerr << "Invalid input file: " << filePath << "\n";
+    return mvec;
+  }
+
+  std::string s;
+  while (inFile >> s)
+    m[s]++;
+#endif // _WIN32
 
   mvec.reserve(m.size());
   for (auto &p : m)
     mvec.emplace_back(WordCount{p.second, move(p.first)});
 
   std::sort(mvec.begin(), mvec.end(), std::greater<WordCount>());
+#ifndef _WIN32  
   munmap(static_cast<void*>(const_cast<char*>(mm)), fs);
+#endif  
   return mvec;
 }
 
