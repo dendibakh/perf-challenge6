@@ -18,6 +18,7 @@
 // multi-threaded version (optional).
 
 #ifdef SOLUTION
+#include <cstring>
 #include <memory>
 #include <immintrin.h>
 
