@@ -20,8 +20,6 @@
 
 #define __assume(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
 
-#define SOLUTION
-
 #ifdef SOLUTION
 
 uint32_t crcHash(const uint8_t* key, int64_t len)
