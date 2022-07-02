@@ -3,6 +3,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "parallel_hashmap/phmap.h"
+
 // use it for init any object you may need.
 void init();
 

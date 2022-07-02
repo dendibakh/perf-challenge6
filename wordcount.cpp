@@ -18,9 +18,31 @@
 // multi-threaded version (optional).
 
 #ifdef SOLUTION
-//
-// Your solution here.
-//
+using phmap::flat_hash_map;
+
+std::vector<WordCount> wordcount(std::string filePath) {
+  flat_hash_map<std::string, int> m;
+
+  std::vector<WordCount> mvec;
+
+  std::ifstream inFile{filePath};
+  if (!inFile) {
+    std::cerr << "Invalid input file: " << filePath << "\n";
+    return mvec;
+  }
+
+  std::string s;
+  while (inFile >> s)
+    m[s]++;
+
+  mvec.reserve(m.size());
+  for (auto &p : m)
+    mvec.emplace_back(WordCount{p.second, move(p.first)});
+
+  std::sort(mvec.begin(), mvec.end(), std::greater<WordCount>());
+  return mvec;
+}
+
 #else
 // Baseline solution.
 // Do not change it - you can use for quickly checking speedups
