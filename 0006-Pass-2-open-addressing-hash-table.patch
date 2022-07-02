@@ -1,0 +1,149 @@
+From 32f0521946fd8aa857e2c5e7166f55971750d9b1 Mon Sep 17 00:00:00 2001
+From: Yann Boucher <Ya2n.boucher@gmail.com>
+Date: Wed, 29 Jun 2022 10:36:45 +0200
+Subject: [PATCH 06/10] Pass 2 : open-addressing hash table
+
+---
+ wordcount.cpp | 99 +++++++++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 89 insertions(+), 10 deletions(-)
+
+diff --git a/wordcount.cpp b/wordcount.cpp
+index 5b148eb..b7885ae 100644
+--- a/wordcount.cpp
++++ b/wordcount.cpp
+@@ -10,26 +10,101 @@
+ #include <cstdint>
+ #include <cassert>
+ 
++#include <x86intrin.h>
++
+ #include "platform_specific.hpp"
+ 
+-//#define SOLUTION
++#define BUCKET_COUNT (4194304*2*2*4) // 2^22
++
++#define __assume(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
+ 
+ #ifdef SOLUTION
+ 
++uint32_t crcHash(const uint8_t* key, int64_t len)
++{
++    uint64_t crc = 0;
++    while (len > 8)
++    {
++        uint64_t val = *(const uint64_t*)key;
++        crc = _mm_crc32_u64(crc, val);
++        len -= 8;
++        key += 8;
++    }
++
++    // CRC the final 1-7 bytes
++    uint64_t val = *(const uint64_t*)key;
++    val &= ~(~0ULL << len*8); // Compiles to a bzhi instruction (also UB)
++    crc = _mm_crc32_u64(crc, val);
++
++    return crc;
++}
++
++struct __attribute__((packed)) hash_slot_t
++{
++    uint32_t count;
++	uint32_t len;
++    const uint8_t* ptr;
++};
++
++struct hash_table_t
++{
++    hash_slot_t slots[BUCKET_COUNT];
++};
++
++inline void hash_table_push_ptr(hash_table_t* table, uint32_t hash, int len, const uint8_t* ptr)
++{
++    hash %= BUCKET_COUNT;
++
++    hash_slot_t* slot = &table->slots[hash];
++
++    bool relooped = false;
++
++    loop:
++    for (; slot < &table->slots[BUCKET_COUNT]; ++slot)
++    {
++        if (slot->count == 0)
++        {
++            slot->count = 1;
++            slot->ptr = ptr;
++			slot->len = len;
++            return;
++        }
++
++        if (slot->len == len && memcmp(slot->ptr, ptr, len) == 0)
++        {
++            ++slot->count;
++			// slot->ptr = ptr;
++            return;
++        }
++    }
++
++    if (!relooped)
++    {
++        relooped = true;
++        slot = &table->slots[0];
++        goto loop;
++    }
++    else
++    {
++        fprintf(stderr, "COLLISION OVERFLOW");
++        exit(1);
++        return;
++    }
++}
++
+ inline const uint8_t* skip_whitespace(const uint8_t* ptr)
+ {
+     do
+         ++ptr;
+-    while ((uint8_t)(*ptr-1) < ' ');
++    while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n'|| *ptr == '\r');
+     return ptr;
+ }
+ 
+ std::vector<WordCount> wordcount(std::string filePath) {
+-	std::unordered_map<std::string, int> m;
+-	m.max_load_factor(0.5);
+-
+ 	std::vector<WordCount> mvec;
+ 
++	hash_table_t* hash_table = (hash_table_t*)calloc(1, sizeof(hash_table_t));
++
+ 	const uint8_t* buf = (const uint8_t*)getDataPtr(filePath);
+ 	const uint8_t* buf_base = buf;
+ 	while (*buf == ' ' || *buf == '\t' || *buf == '\n'|| *buf == '\r')
+@@ -41,16 +116,20 @@ std::vector<WordCount> wordcount(std::string filePath) {
+ 		while (*boundary > ' ') // Skip until reaching a non-word character
+ 			++boundary;
+ 
+-		std::string word{(const char*)buf, (size_t)(boundary - buf)};
+-		m[word]++;
++		uint32_t hash = crcHash(buf, (uint32_t)(boundary - buf));
++		hash_table_push_ptr(hash_table, hash, (uint32_t)(boundary - buf), buf);
+ 
+ 		boundary = skip_whitespace(boundary);
+ 		buf = boundary;
+ 	} while (*buf);
+ 
+-	mvec.reserve(m.size());
+-	for (auto &p : m)
+-		mvec.emplace_back(WordCount{p.second, move(p.first)});
++	for (int i = 0; i < BUCKET_COUNT; ++i)
++	{
++		if (hash_table->slots[i].count > 0)
++		{
++			mvec.emplace_back(WordCount{(int)hash_table->slots[i].count , std::string((const char*)hash_table->slots[i].ptr, (size_t)hash_table->slots[i].len)});
++		}
++	}
+ 
+ 	std::sort(mvec.begin(), mvec.end(), std::greater<WordCount>());
+ 	return mvec;
+-- 
+2.34.1.windows.1
+

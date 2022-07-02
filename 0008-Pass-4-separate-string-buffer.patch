@@ -1,0 +1,58 @@
+From eb589c0fd3684fe365562d41f70d7e2400cd13b7 Mon Sep 17 00:00:00 2001
+From: Yann Boucher <Ya2n.boucher@gmail.com>
+Date: Wed, 29 Jun 2022 10:45:16 +0200
+Subject: [PATCH 08/10] Pass 4 : separate string buffer
+
+---
+ wordcount.cpp | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/wordcount.cpp b/wordcount.cpp
+index 906ba24..504ecd8 100644
+--- a/wordcount.cpp
++++ b/wordcount.cpp
+@@ -19,6 +19,8 @@
+ 
+ #define __assume(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
+ 
++#define SOLUTION
++
+ #ifdef SOLUTION
+ 
+ uint32_t crcHash(const uint8_t* key, int64_t len)
+@@ -120,6 +122,9 @@ inline void hash_table_push(hash_table_t* table, uint32_t hash, __m256i val, int
+     }
+ }
+ 
++char* string_buffer;
++char* string_buffer_ptr;
++
+ inline void hash_table_push_ptr(hash_table_t* table, uint32_t hash, int len, const uint8_t* ptr)
+ {
+     hash %= BUCKET_COUNT;
+@@ -138,7 +143,12 @@ inline void hash_table_push_ptr(hash_table_t* table, uint32_t hash, int len, con
+             if (__builtin_expect(slot->node[0] == 0, 1))
+             {
+                 slot->count = 1;
+-                slot->node = _mm256_set_epi64x(len, ((uint64_t*)ptr)[0], (uint64_t)ptr, 0u | ((uint64_t)len_in_qwords << 32u));
++                slot->node = _mm256_set_epi64x(len, ((uint64_t*)ptr)[0], (uint64_t)string_buffer_ptr, 0u | ((uint64_t)len_in_qwords << 32u));
++
++                memcpy(string_buffer_ptr, ptr, len);
++                string_buffer_ptr += len;
++                // Pad
++                string_buffer_ptr += (8 - len%8) + 8;
+ 
+                 return;
+             }
+@@ -184,6 +194,8 @@ void read_words(const std::string& filePath)
+ {
+     void* large_ptr = (hash_table_t*)calloc(1, sizeof(hash_table_t));
+ 
++	string_buffer_ptr = string_buffer = (char*)calloc(2000000000, 1);
++
+     hash_table = (hash_table_t*)large_ptr;
+ 
+     const uint8_t* buf = (const uint8_t*)getDataPtr(filePath);
+-- 
+2.34.1.windows.1
+

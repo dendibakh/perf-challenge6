@@ -1,0 +1,428 @@
+From 80eb7a6668f4235289f9f30d8e1ec600fe766c74 Mon Sep 17 00:00:00 2001
+From: Yann Boucher <Ya2n.boucher@gmail.com>
+Date: Wed, 29 Jun 2022 10:41:32 +0200
+Subject: [PATCH 07/10] Pass 3 : in-place storage of strings in hash table
+
+---
+ aligned_allocator.hpp | 149 ++++++++++++++++++++++++++++++++
+ wordcount.cpp         | 191 +++++++++++++++++++++++++++++++++++-------
+ 2 files changed, 310 insertions(+), 30 deletions(-)
+ create mode 100644 aligned_allocator.hpp
+
+diff --git a/aligned_allocator.hpp b/aligned_allocator.hpp
+new file mode 100644
+index 0000000..4065173
+--- /dev/null
++++ b/aligned_allocator.hpp
+@@ -0,0 +1,149 @@
++#ifdef _WIN32
++#include <malloc.h>
++#endif
++#include <cstdint>
++#include <vector>
++#include <iostream>
++
++/**
++ * Allocator for aligned data.
++ *
++ * Modified from the Mallocator from Stephan T. Lavavej.
++ * <http://blogs.msdn.com/b/vcblog/archive/2008/08/28/the-mallocator.aspx>
++ */
++template <typename T, std::size_t Alignment>
++class aligned_allocator
++{
++	public:
++ 
++		// The following will be the same for virtually all allocators.
++		typedef T * pointer;
++		typedef const T * const_pointer;
++		typedef T& reference;
++		typedef const T& const_reference;
++		typedef T value_type;
++		typedef std::size_t size_type;
++		typedef ptrdiff_t difference_type;
++ 
++		T * address(T& r) const
++		{
++			return &r;
++		}
++ 
++		const T * address(const T& s) const
++		{
++			return &s;
++		}
++ 
++		std::size_t max_size() const
++		{
++			// The following has been carefully written to be independent of
++			// the definition of size_t and to avoid signed/unsigned warnings.
++			return (static_cast<std::size_t>(0) - static_cast<std::size_t>(1)) / sizeof(T);
++		}
++ 
++ 
++		// The following must be the same for all allocators.
++		template <typename U>
++		struct rebind
++		{
++			typedef aligned_allocator<U, Alignment> other;
++		} ;
++ 
++		bool operator!=(const aligned_allocator& other) const
++		{
++			return !(*this == other);
++		}
++ 
++		void construct(T * const p, const T& t) const
++		{
++			void * const pv = static_cast<void *>(p);
++ 
++			new (pv) T(t);
++		}
++ 
++		void destroy(T * const p) const
++		{
++			p->~T();
++		}
++ 
++		// Returns true if and only if storage allocated from *this
++		// can be deallocated from other, and vice versa.
++		// Always returns true for stateless allocators.
++		bool operator==(const aligned_allocator& other) const
++		{
++			return true;
++		}
++ 
++ 
++		// Default constructor, copy constructor, rebinding constructor, and destructor.
++		// Empty for stateless allocators.
++		aligned_allocator() { }
++ 
++		aligned_allocator(const aligned_allocator&) { }
++ 
++		template <typename U> aligned_allocator(const aligned_allocator<U, Alignment>&) { }
++ 
++		~aligned_allocator() { }
++ 
++ 
++		// The following will be different for each allocator.
++		T * allocate(const std::size_t n) const
++		{
++			// The return value of allocate(0) is unspecified.
++			// Mallocator returns NULL in order to avoid depending
++			// on malloc(0)'s implementation-defined behavior
++			// (the implementation can define malloc(0) to return NULL,
++			// in which case the bad_alloc check below would fire).
++			// All allocators can return NULL in this case.
++			if (n == 0) {
++				return NULL;
++			}
++ 
++			// All allocators should contain an integer overflow check.
++			// The Standardization Committee recommends that std::length_error
++			// be thrown in the case of integer overflow.
++			if (n > max_size())
++			{
++				throw std::length_error("aligned_allocator<T>::allocate() - Integer overflow.");
++			}
++ 			
++
++			// Mallocator wraps malloc().
++			void * const pv = _mm_malloc(n * sizeof(T), Alignment);
++
++ 
++			// Allocators should throw std::bad_alloc in the case of memory allocation failure.
++			if (pv == NULL)
++			{
++				throw std::bad_alloc();
++			}
++ 
++			return static_cast<T *>(pv);
++		}
++ 
++		void deallocate(T * const p, const std::size_t n) const
++		{
++			_mm_free(p);
++		}
++ 
++ 
++		// The following will be the same for all allocators that ignore hints.
++		template <typename U>
++		T * allocate(const std::size_t n, const U * /* const hint */) const
++		{
++			
++			return allocate(n);
++		}
++ 
++ 
++		// Allocators are not required to be assignable, so
++		// all allocators should have a private unimplemented
++		// assignment operator. Note that this will trigger the
++		// off-by-default (enabled under /Wall) warning C4626
++		// "assignment operator could not be generated because a
++		// base class assignment operator is inaccessible" within
++		// the STL headers, but that warning is useless.
++	private:
++		aligned_allocator& operator=(const aligned_allocator&);
++};
+\ No newline at end of file
+diff --git a/wordcount.cpp b/wordcount.cpp
+index b7885ae..906ba24 100644
+--- a/wordcount.cpp
++++ b/wordcount.cpp
+@@ -13,6 +13,7 @@
+ #include <x86intrin.h>
+ 
+ #include "platform_specific.hpp"
++#include "aligned_allocator.hpp"
+ 
+ #define BUCKET_COUNT (4194304*2*2*4) // 2^22
+ 
+@@ -39,24 +40,53 @@ uint32_t crcHash(const uint8_t* key, int64_t len)
+     return crc;
+ }
+ 
++inline uint32_t crcHash32B(uint64_t q0, uint64_t q1, uint64_t q2, uint64_t q3)
++{
++    uint64_t crc = 0;
++    crc = _mm_crc32_u64(crc, q0);
++    crc = _mm_crc32_u64(crc, q1);
++    crc = _mm_crc32_u64(crc, q2);
++    crc = _mm_crc32_u64(crc, q3);
++
++    return crc;
++}
++
+ struct __attribute__((packed)) hash_slot_t
+ {
+     uint32_t count;
+-	uint32_t len;
+-    const uint8_t* ptr;
++    __m256i node;
+ };
+ 
+ struct hash_table_t
+ {
+     hash_slot_t slots[BUCKET_COUNT];
++    int unique_words;
+ };
+ 
+-inline void hash_table_push_ptr(hash_table_t* table, uint32_t hash, int len, const uint8_t* ptr)
++// Generate a mask for clearing the n upper bytes of a vector
++inline __m256i mask_shift_2(uint32_t n)
++{
++    static const int8_t mask_lut[64] = {
++        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
++        -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
++        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
++        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
++    };
++    return _mm256_loadu_si256((__m256i *)(mask_lut + 32 - n));
++}
++
++inline void hash_table_push(hash_table_t* table, uint32_t hash, __m256i val, int len, const uint8_t* ptr)
+ {
+     hash %= BUCKET_COUNT;
+ 
+     hash_slot_t* slot = &table->slots[hash];
+ 
++    if (_mm256_movemask_epi8(_mm256_cmpeq_epi8(slot->node, val)) == 0xFFFFFFFF)
++    {
++        ++slot->count;
++        return;
++    }
++
+     bool relooped = false;
+ 
+     loop:
+@@ -65,15 +95,13 @@ inline void hash_table_push_ptr(hash_table_t* table, uint32_t hash, int len, con
+         if (slot->count == 0)
+         {
+             slot->count = 1;
+-            slot->ptr = ptr;
+-			slot->len = len;
++            slot->node = val;
+             return;
+         }
+ 
+-        if (slot->len == len && memcmp(slot->ptr, ptr, len) == 0)
++        if (_mm256_movemask_epi8(_mm256_cmpeq_epi8(slot->node, val)) == 0xFFFFFFFF)
+         {
+             ++slot->count;
+-			// slot->ptr = ptr;
+             return;
+         }
+     }
+@@ -92,44 +120,147 @@ inline void hash_table_push_ptr(hash_table_t* table, uint32_t hash, int len, con
+     }
+ }
+ 
++inline void hash_table_push_ptr(hash_table_t* table, uint32_t hash, int len, const uint8_t* ptr)
++{
++    hash %= BUCKET_COUNT;
++
++    hash_slot_t* slot = &table->slots[hash];
++    bool relooped = false;
++
++    uint32_t len_in_qwords = (len / 8) + (len % 8 ? 1 : 0);
++
++    loop:
++    do
++    {
++        // nonzero, it's not a pointer of the same length, skip
++        if (__builtin_expect(slot->node[3] != len, 0))
++        {
++            if (__builtin_expect(slot->node[0] == 0, 1))
++            {
++                slot->count = 1;
++                slot->node = _mm256_set_epi64x(len, ((uint64_t*)ptr)[0], (uint64_t)ptr, 0u | ((uint64_t)len_in_qwords << 32u));
++
++                return;
++            }
++            else
++                continue;
++        }
++		if (slot->node[2] != ((uint64_t*)ptr)[0]) // First 8 bytes differ
++			continue;
++		
++        uint8_t* other_ptr = *((uint8_t**)&slot->node + 1);
++        if (__builtin_expect(memcmp(ptr+16, other_ptr+16, len-16) == 0, 1))
++        {
++            ++slot->count;
++
++            return;
++        }
++    } while (++slot < &table->slots[BUCKET_COUNT]);
++
++    if (!relooped)
++    {
++        relooped = true;
++        slot = &table->slots[0];
++        goto loop;
++    }
++    else
++    {
++        fprintf(stderr, "COLLISION OVERFLOW");
++        exit(1);
++        return;
++    }
++}
++
+ inline const uint8_t* skip_whitespace(const uint8_t* ptr)
+ {
+     do
+         ++ptr;
+-    while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n'|| *ptr == '\r');
++    while ((uint8_t)(*ptr-1) < ' ');
+     return ptr;
+ }
+ 
+-std::vector<WordCount> wordcount(std::string filePath) {
+-	std::vector<WordCount> mvec;
++static hash_table_t* hash_table;
++void read_words(const std::string& filePath)
++{
++    void* large_ptr = (hash_table_t*)calloc(1, sizeof(hash_table_t));
+ 
+-	hash_table_t* hash_table = (hash_table_t*)calloc(1, sizeof(hash_table_t));
++    hash_table = (hash_table_t*)large_ptr;
+ 
+-	const uint8_t* buf = (const uint8_t*)getDataPtr(filePath);
+-	const uint8_t* buf_base = buf;
+-	while (*buf == ' ' || *buf == '\t' || *buf == '\n'|| *buf == '\r')
+-		++buf;
++    const uint8_t* buf = (const uint8_t*)getDataPtr(filePath);
++    const uint8_t* buf_base = buf;
++    while (*buf == ' ' || *buf == '\t' || *buf == '\n'|| *buf == '\r')
++        ++buf;
+ 
+-	const uint8_t* boundary = buf;
+-	do
+-	{
+-		while (*boundary > ' ') // Skip until reaching a non-word character
+-			++boundary;
++    const uint8_t* boundary = buf;
++    do
++    {
++        // Try finding the first non-graphical char
++        __m256i chunk = _mm256_loadu_si256((const __m256i*)buf);
++        // unsigned comparison
++        __m256i boundaries = _mm256_cmpeq_epi8(_mm256_set1_epi8(' '), _mm256_max_epu8(chunk,_mm256_set1_epi8(' ')));
+ 
+-		uint32_t hash = crcHash(buf, (uint32_t)(boundary - buf));
+-		hash_table_push_ptr(hash_table, hash, (uint32_t)(boundary - buf), buf);
+ 
+-		boundary = skip_whitespace(boundary);
+-		buf = boundary;
+-	} while (*buf);
++        uint32_t mask = _mm256_movemask_epi8(boundaries);
+ 
+-	for (int i = 0; i < BUCKET_COUNT; ++i)
+-	{
+-		if (hash_table->slots[i].count > 0)
++        if (mask == 0) // >32B word
++        {
++            boundary += sizeof(__m256i);
++            while (*boundary > ' ') // Skip until reaching a non-word character
++                ++boundary;
++
++            uint32_t hash = crcHash(buf, (uint32_t)(boundary - buf));
++
++            hash_table_push_ptr(hash_table, hash, (uint32_t)(boundary - buf), buf);
++        }
++        else
++        {
++            int len = _tzcnt_u32(mask);
++
++            chunk = _mm256_and_si256(chunk, mask_shift_2(len));
++
++            boundary += len;
++
++
++            uint32_t hash = crcHash32B(_mm256_extract_epi64(chunk, 0),
++                                       _mm256_extract_epi64(chunk, 1),
++                                       _mm256_extract_epi64(chunk, 2),
++                                       _mm256_extract_epi64(chunk, 3));
++
++            hash_table_push(hash_table, hash, chunk, len, buf);
++        }
++
++        boundary = skip_whitespace(boundary);
++        buf = boundary;
++    } while (*buf);
++}
++
++std::vector<WordCount> wordcount(std::string filePath) {
++	std::vector<WordCount> mvec;
++	read_words(filePath);
++
++	for (size_t i = 0; i < BUCKET_COUNT; ++i)
++    {
++        if (hash_table->slots[i].count == 0)
++            continue;
++
++		__m256i node = hash_table->slots[i].node;
++		uint32_t count = hash_table->slots[i].count;
++		if (*(uint8_t*)&node == 0) // Pointer
++		{
++			const char* ptr = (const char*)node[1];
++			size_t len = node[3];
++			mvec.emplace_back(WordCount{(int)count, std::string(ptr, len)});
++			//printf("%d : {%.*s}\n", count, len, ptr);
++		}
++		else // Pointer vs inline
+ 		{
+-			mvec.emplace_back(WordCount{(int)hash_table->slots[i].count , std::string((const char*)hash_table->slots[i].ptr, (size_t)hash_table->slots[i].len)});
++			const char* ptr = (const char*)&node;
++			__m256i mask = _mm256_cmpeq_epi8(node, _mm256_set1_epi8(0));
++			int len = _mm_tzcnt_32(_mm256_movemask_epi8(mask));
++			mvec.emplace_back(WordCount{(int)count, std::string(ptr, len)});
++			//printf("%d : {%.32s}\n", count, ptr);
+ 		}
+-	}
++    }
+ 
+ 	std::sort(mvec.begin(), mvec.end(), std::greater<WordCount>());
+ 	return mvec;
+-- 
+2.34.1.windows.1
+

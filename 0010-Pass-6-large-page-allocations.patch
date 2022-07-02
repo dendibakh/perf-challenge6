@@ -1,0 +1,88 @@
+From 5f9b55bb27b0a05b392197af8355dfc26928280d Mon Sep 17 00:00:00 2001
+From: Yann Boucher <Ya2n.boucher@gmail.com>
+Date: Wed, 29 Jun 2022 13:27:10 +0200
+Subject: [PATCH 10/10] Pass 6 : large page allocations
+
+---
+ wordcount.cpp | 31 ++++++++++++++++++-------------
+ 1 file changed, 18 insertions(+), 13 deletions(-)
+
+diff --git a/wordcount.cpp b/wordcount.cpp
+index b21cd22..28c3cdd 100644
+--- a/wordcount.cpp
++++ b/wordcount.cpp
+@@ -1,13 +1,5 @@
+ #include "wordcount.hpp"
+ 
+-#undef _GLIBCXX_DEBUG                // disable run-time bound checking, etc
+-#pragma GCC optimize("Ofast,inline") // Ofast = O3,fast-math,allow-store-data-races,no-protect-parens
+-
+-#pragma GCC target("bmi,bmi2,lzcnt,popcnt")                      // bit manipulation
+-#pragma GCC target("movbe")                                      // byte swap
+-#pragma GCC target("aes,pclmul,rdrnd")                           // encryption
+-#pragma GCC target("avx,avx2,f16c,fma,sse3,ssse3,sse4.1,sse4.2") // SIMD
+-
+ #include <algorithm>
+ #include <fstream>
+ #include <iostream>
+@@ -28,6 +20,8 @@
+ 
+ #define __assume(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
+ 
++#define SOLUTION
++
+ #ifdef SOLUTION
+ 
+ uint32_t crcHash(const uint8_t* key, int64_t len)
+@@ -199,9 +193,19 @@ inline const uint8_t* skip_whitespace(const uint8_t* ptr)
+ static hash_table_t* hash_table;
+ void read_words(const std::string& filePath)
+ {
+-    void* large_ptr = (hash_table_t*)calloc(1, sizeof(hash_table_t));
+-
+-	string_buffer_ptr = string_buffer = (char*)calloc(2000000000, 1);
++    void* large_ptr = (hash_table_t*)alloc_large_pages(sizeof(hash_table_t));
++    if (!large_ptr)
++    {
++        fprintf(stderr, "Unable to allocate the hash_table pointer\n");
++        exit(1);
++    }
++	
++	string_buffer_ptr = string_buffer = (char*)alloc_large_pages(2000000000);
++    if (!string_buffer)
++    {
++        fprintf(stderr, "Unable to allocate the string_buf pointer\n");
++        exit(1);
++    }
+ 
+     hash_table = (hash_table_t*)large_ptr;
+ 
+@@ -259,7 +263,6 @@ struct frequent_item_t
+ 	uint32_t count;
+ };
+ 
+-
+ template <typename T>
+ void do_sort(T* begin, T* end)
+ {
+@@ -332,6 +335,8 @@ void do_sort(T* begin, T* end)
+ 
+ std::vector<WordCount> wordcount(std::string filePath) {
+ 	
++	enable_large_pages();
++	
+ 	std::vector<__m256i, aligned_allocator<__m256i, sizeof(__m256i)>> medium_sort_arrays[MEDIUM_SORT_THRESHOLD];
+ 	std::vector<frequent_item_t, aligned_allocator<frequent_item_t, sizeof(__m256i)>> frequent_items;
+ 	
+@@ -353,7 +358,7 @@ std::vector<WordCount> wordcount(std::string filePath) {
+ 			
+             uint8_t c;
+             if (*(uint8_t*)&hash_table->slots[i].node == 0)
+-                c = ((uint8_t*)&node)[2*sizeof(uint64_t)]; // first 8bytes are stored in place, grab the first char from it
++                c = ((uint8_t*)&node)[2*sizeof(uint64_t)]; // first 16bytes are stored in place, grab the first char from it
+             else
+                 c = *(uint8_t*)&hash_table->slots[i].node;
+ 
+-- 
+2.34.1.windows.1
+

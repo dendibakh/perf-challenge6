@@ -1,0 +1,762 @@
+From ce2c095f704ed8a66f9e0ea502a91a81616fc4c5 Mon Sep 17 00:00:00 2001
+From: Yann Boucher <Ya2n.boucher@gmail.com>
+Date: Wed, 29 Jun 2022 10:50:28 +0200
+Subject: [PATCH 09/10] Pass 5 : Better sorting
+
+---
+ pdqsort.h     | 532 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ wordcount.cpp | 160 ++++++++++++++-
+ 2 files changed, 682 insertions(+), 10 deletions(-)
+ create mode 100644 pdqsort.h
+
+diff --git a/pdqsort.h b/pdqsort.h
+new file mode 100644
+index 0000000..36360cd
+--- /dev/null
++++ b/pdqsort.h
+@@ -0,0 +1,532 @@
++/*
++    pdqsort.h - Pattern-defeating quicksort.
++
++    Copyright (c) 2021 Orson Peters
++
++    This software is provided 'as-is', without any express or implied warranty. In no event will the
++    authors be held liable for any damages arising from the use of this software.
++
++    Permission is granted to anyone to use this software for any purpose, including commercial
++    applications, and to alter it and redistribute it freely, subject to the following restrictions:
++
++    1. The origin of this software must not be misrepresented; you must not claim that you wrote the
++       original software. If you use this software in a product, an acknowledgment in the product
++       documentation would be appreciated but is not required.
++
++    2. Altered source versions must be plainly marked as such, and must not be misrepresented as
++       being the original software.
++
++    3. This notice may not be removed or altered from any source distribution.
++*/
++
++
++#ifndef PDQSORT_H
++#define PDQSORT_H
++
++#include <algorithm>
++#include <cstddef>
++#include <functional>
++#include <utility>
++#include <iterator>
++
++#if __cplusplus >= 201103L
++    #include <cstdint>
++    #include <type_traits>
++    #define PDQSORT_PREFER_MOVE(x) std::move(x)
++#else
++    #define PDQSORT_PREFER_MOVE(x) (x)
++#endif
++
++
++namespace pdqsort_detail {
++    enum {
++        // Partitions below this size are sorted using insertion sort.
++        insertion_sort_threshold = 24,
++
++        // Partitions above this size use Tukey's ninther to select the pivot.
++        ninther_threshold = 128,
++
++        // When we detect an already sorted partition, attempt an insertion sort that allows this
++        // amount of element moves before giving up.
++        partial_insertion_sort_limit = 8,
++
++        // Must be multiple of 8 due to loop unrolling, and < 256 to fit in unsigned char.
++        block_size = 64,
++
++        // Cacheline size, assumes power of two.
++        cacheline_size = 64
++
++    };
++
++#if __cplusplus >= 201103L
++    template<class T> struct is_default_compare : std::false_type { };
++    template<class T> struct is_default_compare<std::less<T>> : std::true_type { };
++    template<class T> struct is_default_compare<std::greater<T>> : std::true_type { };
++#endif
++
++    // Returns floor(log2(n)), assumes n > 0.
++    template<class T>
++    inline int log2(T n) {
++        int log = 0;
++        while (n >>= 1) ++log;
++        return log;
++    }
++
++    // Sorts [begin, end) using insertion sort with the given comparison function.
++    template<class Iter, class Compare>
++    inline void insertion_sort(Iter begin, Iter end, Compare comp) {
++        typedef typename std::iterator_traits<Iter>::value_type T;
++        if (begin == end) return;
++
++        for (Iter cur = begin + 1; cur != end; ++cur) {
++            Iter sift = cur;
++            Iter sift_1 = cur - 1;
++
++            // Compare first so we can avoid 2 moves for an element already positioned correctly.
++            if (comp(*sift, *sift_1)) {
++                T tmp = PDQSORT_PREFER_MOVE(*sift);
++
++                do { *sift-- = PDQSORT_PREFER_MOVE(*sift_1); }
++                while (sift != begin && comp(tmp, *--sift_1));
++
++                *sift = PDQSORT_PREFER_MOVE(tmp);
++            }
++        }
++    }
++
++    // Sorts [begin, end) using insertion sort with the given comparison function. Assumes
++    // *(begin - 1) is an element smaller than or equal to any element in [begin, end).
++    template<class Iter, class Compare>
++    inline void unguarded_insertion_sort(Iter begin, Iter end, Compare comp) {
++        typedef typename std::iterator_traits<Iter>::value_type T;
++        if (begin == end) return;
++
++        for (Iter cur = begin + 1; cur != end; ++cur) {
++            Iter sift = cur;
++            Iter sift_1 = cur - 1;
++
++            // Compare first so we can avoid 2 moves for an element already positioned correctly.
++            if (comp(*sift, *sift_1)) {
++                T tmp = PDQSORT_PREFER_MOVE(*sift);
++
++                do { *sift-- = PDQSORT_PREFER_MOVE(*sift_1); }
++                while (comp(tmp, *--sift_1));
++
++                *sift = PDQSORT_PREFER_MOVE(tmp);
++            }
++        }
++    }
++
++    // Attempts to use insertion sort on [begin, end). Will return false if more than
++    // partial_insertion_sort_limit elements were moved, and abort sorting. Otherwise it will
++    // successfully sort and return true.
++    template<class Iter, class Compare>
++    inline bool partial_insertion_sort(Iter begin, Iter end, Compare comp) {
++        typedef typename std::iterator_traits<Iter>::value_type T;
++        if (begin == end) return true;
++        
++        std::size_t limit = 0;
++        for (Iter cur = begin + 1; cur != end; ++cur) {
++            Iter sift = cur;
++            Iter sift_1 = cur - 1;
++
++            // Compare first so we can avoid 2 moves for an element already positioned correctly.
++            if (comp(*sift, *sift_1)) {
++                T tmp = PDQSORT_PREFER_MOVE(*sift);
++
++                do { *sift-- = PDQSORT_PREFER_MOVE(*sift_1); }
++                while (sift != begin && comp(tmp, *--sift_1));
++
++                *sift = PDQSORT_PREFER_MOVE(tmp);
++                limit += cur - sift;
++            }
++            
++            if (limit > partial_insertion_sort_limit) return false;
++        }
++
++        return true;
++    }
++
++    template<class Iter, class Compare>
++    inline void sort2(Iter a, Iter b, Compare comp) {
++        if (comp(*b, *a)) std::iter_swap(a, b);
++    }
++
++    // Sorts the elements *a, *b and *c using comparison function comp.
++    template<class Iter, class Compare>
++    inline void sort3(Iter a, Iter b, Iter c, Compare comp) {
++        sort2(a, b, comp);
++        sort2(b, c, comp);
++        sort2(a, b, comp);
++    }
++
++    template<class T>
++    inline T* align_cacheline(T* p) {
++#if defined(UINTPTR_MAX) && __cplusplus >= 201103L
++        std::uintptr_t ip = reinterpret_cast<std::uintptr_t>(p);
++#else
++        std::size_t ip = reinterpret_cast<std::size_t>(p);
++#endif
++        ip = (ip + cacheline_size - 1) & -cacheline_size;
++        return reinterpret_cast<T*>(ip);
++    }
++
++    template<class Iter>
++    inline void swap_offsets(Iter first, Iter last,
++                             unsigned char* offsets_l, unsigned char* offsets_r,
++                             size_t num, bool use_swaps) {
++        typedef typename std::iterator_traits<Iter>::value_type T;
++        if (use_swaps) {
++            // This case is needed for the descending distribution, where we need
++            // to have proper swapping for pdqsort to remain O(n).
++            for (size_t i = 0; i < num; ++i) {
++                std::iter_swap(first + offsets_l[i], last - offsets_r[i]);
++            }
++        } else if (num > 0) {
++            Iter l = first + offsets_l[0]; Iter r = last - offsets_r[0];
++            T tmp(PDQSORT_PREFER_MOVE(*l)); *l = PDQSORT_PREFER_MOVE(*r);
++            for (size_t i = 1; i < num; ++i) {
++                l = first + offsets_l[i]; *r = PDQSORT_PREFER_MOVE(*l);
++                r = last - offsets_r[i]; *l = PDQSORT_PREFER_MOVE(*r);
++            }
++            *r = PDQSORT_PREFER_MOVE(tmp);
++        }
++    }
++
++    // Partitions [begin, end) around pivot *begin using comparison function comp. Elements equal
++    // to the pivot are put in the right-hand partition. Returns the position of the pivot after
++    // partitioning and whether the passed sequence already was correctly partitioned. Assumes the
++    // pivot is a median of at least 3 elements and that [begin, end) is at least
++    // insertion_sort_threshold long. Uses branchless partitioning.
++    template<class Iter, class Compare>
++    inline std::pair<Iter, bool> partition_right_branchless(Iter begin, Iter end, Compare comp) {
++        typedef typename std::iterator_traits<Iter>::value_type T;
++
++        // Move pivot into local for speed.
++        T pivot(PDQSORT_PREFER_MOVE(*begin));
++        Iter first = begin;
++        Iter last = end;
++
++        // Find the first element greater than or equal than the pivot (the median of 3 guarantees
++        // this exists).
++        while (comp(*++first, pivot));
++
++        // Find the first element strictly smaller than the pivot. We have to guard this search if
++        // there was no element before *first.
++        if (first - 1 == begin) while (first < last && !comp(*--last, pivot));
++        else                    while (                !comp(*--last, pivot));
++
++        // If the first pair of elements that should be swapped to partition are the same element,
++        // the passed in sequence already was correctly partitioned.
++        bool already_partitioned = first >= last;
++        if (!already_partitioned) {
++            std::iter_swap(first, last);
++            ++first;
++
++            // The following branchless partitioning is derived from "BlockQuicksort: How Branch
++            // Mispredictions don’t affect Quicksort" by Stefan Edelkamp and Armin Weiss, but
++            // heavily micro-optimized.
++            unsigned char offsets_l_storage[block_size + cacheline_size];
++            unsigned char offsets_r_storage[block_size + cacheline_size];
++            unsigned char* offsets_l = align_cacheline(offsets_l_storage);
++            unsigned char* offsets_r = align_cacheline(offsets_r_storage);
++
++            Iter offsets_l_base = first;
++            Iter offsets_r_base = last;
++            size_t num_l, num_r, start_l, start_r;
++            num_l = num_r = start_l = start_r = 0;
++            
++            while (first < last) {
++                // Fill up offset blocks with elements that are on the wrong side.
++                // First we determine how much elements are considered for each offset block.
++                size_t num_unknown = last - first;
++                size_t left_split = num_l == 0 ? (num_r == 0 ? num_unknown / 2 : num_unknown) : 0;
++                size_t right_split = num_r == 0 ? (num_unknown - left_split) : 0;
++
++                // Fill the offset blocks.
++                if (left_split >= block_size) {
++                    for (size_t i = 0; i < block_size;) {
++                        offsets_l[num_l] = i++; num_l += !comp(*first, pivot); ++first;
++                        offsets_l[num_l] = i++; num_l += !comp(*first, pivot); ++first;
++                        offsets_l[num_l] = i++; num_l += !comp(*first, pivot); ++first;
++                        offsets_l[num_l] = i++; num_l += !comp(*first, pivot); ++first;
++                        offsets_l[num_l] = i++; num_l += !comp(*first, pivot); ++first;
++                        offsets_l[num_l] = i++; num_l += !comp(*first, pivot); ++first;
++                        offsets_l[num_l] = i++; num_l += !comp(*first, pivot); ++first;
++                        offsets_l[num_l] = i++; num_l += !comp(*first, pivot); ++first;
++                    }
++                } else {
++                    for (size_t i = 0; i < left_split;) {
++                        offsets_l[num_l] = i++; num_l += !comp(*first, pivot); ++first;
++                    }
++                }
++
++                if (right_split >= block_size) {
++                    for (size_t i = 0; i < block_size;) {
++                        offsets_r[num_r] = ++i; num_r += comp(*--last, pivot);
++                        offsets_r[num_r] = ++i; num_r += comp(*--last, pivot);
++                        offsets_r[num_r] = ++i; num_r += comp(*--last, pivot);
++                        offsets_r[num_r] = ++i; num_r += comp(*--last, pivot);
++                        offsets_r[num_r] = ++i; num_r += comp(*--last, pivot);
++                        offsets_r[num_r] = ++i; num_r += comp(*--last, pivot);
++                        offsets_r[num_r] = ++i; num_r += comp(*--last, pivot);
++                        offsets_r[num_r] = ++i; num_r += comp(*--last, pivot);
++                    }
++                } else {
++                    for (size_t i = 0; i < right_split;) {
++                        offsets_r[num_r] = ++i; num_r += comp(*--last, pivot);
++                    }
++                }
++
++                // Swap elements and update block sizes and first/last boundaries.
++                size_t num = std::min(num_l, num_r);
++                swap_offsets(offsets_l_base, offsets_r_base,
++                             offsets_l + start_l, offsets_r + start_r,
++                             num, num_l == num_r);
++                num_l -= num; num_r -= num;
++                start_l += num; start_r += num;
++
++                if (num_l == 0) {
++                    start_l = 0;
++                    offsets_l_base = first;
++                }
++                
++                if (num_r == 0) {
++                    start_r = 0;
++                    offsets_r_base = last;
++                }
++            }
++
++            // We have now fully identified [first, last)'s proper position. Swap the last elements.
++            if (num_l) {
++                offsets_l += start_l;
++                while (num_l--) std::iter_swap(offsets_l_base + offsets_l[num_l], --last);
++                first = last;
++            }
++            if (num_r) {
++                offsets_r += start_r;
++                while (num_r--) std::iter_swap(offsets_r_base - offsets_r[num_r], first), ++first;
++                last = first;
++            }
++        }
++
++        // Put the pivot in the right place.
++        Iter pivot_pos = first - 1;
++        *begin = PDQSORT_PREFER_MOVE(*pivot_pos);
++        *pivot_pos = PDQSORT_PREFER_MOVE(pivot);
++
++        return std::make_pair(pivot_pos, already_partitioned);
++    }
++
++
++
++    // Partitions [begin, end) around pivot *begin using comparison function comp. Elements equal
++    // to the pivot are put in the right-hand partition. Returns the position of the pivot after
++    // partitioning and whether the passed sequence already was correctly partitioned. Assumes the
++    // pivot is a median of at least 3 elements and that [begin, end) is at least
++    // insertion_sort_threshold long.
++    template<class Iter, class Compare>
++    inline std::pair<Iter, bool> partition_right(Iter begin, Iter end, Compare comp) {
++        typedef typename std::iterator_traits<Iter>::value_type T;
++        
++        // Move pivot into local for speed.
++        T pivot(PDQSORT_PREFER_MOVE(*begin));
++
++        Iter first = begin;
++        Iter last = end;
++
++        // Find the first element greater than or equal than the pivot (the median of 3 guarantees
++        // this exists).
++        while (comp(*++first, pivot));
++
++        // Find the first element strictly smaller than the pivot. We have to guard this search if
++        // there was no element before *first.
++        if (first - 1 == begin) while (first < last && !comp(*--last, pivot));
++        else                    while (                !comp(*--last, pivot));
++
++        // If the first pair of elements that should be swapped to partition are the same element,
++        // the passed in sequence already was correctly partitioned.
++        bool already_partitioned = first >= last;
++        
++        // Keep swapping pairs of elements that are on the wrong side of the pivot. Previously
++        // swapped pairs guard the searches, which is why the first iteration is special-cased
++        // above.
++        while (first < last) {
++            std::iter_swap(first, last);
++            while (comp(*++first, pivot));
++            while (!comp(*--last, pivot));
++        }
++
++        // Put the pivot in the right place.
++        Iter pivot_pos = first - 1;
++        *begin = PDQSORT_PREFER_MOVE(*pivot_pos);
++        *pivot_pos = PDQSORT_PREFER_MOVE(pivot);
++
++        return std::make_pair(pivot_pos, already_partitioned);
++    }
++
++    // Similar function to the one above, except elements equal to the pivot are put to the left of
++    // the pivot and it doesn't check or return if the passed sequence already was partitioned.
++    // Since this is rarely used (the many equal case), and in that case pdqsort already has O(n)
++    // performance, no block quicksort is applied here for simplicity.
++    template<class Iter, class Compare>
++    inline Iter partition_left(Iter begin, Iter end, Compare comp) {
++        typedef typename std::iterator_traits<Iter>::value_type T;
++
++        T pivot(PDQSORT_PREFER_MOVE(*begin));
++        Iter first = begin;
++        Iter last = end;
++        
++        while (comp(pivot, *--last));
++
++        if (last + 1 == end) while (first < last && !comp(pivot, *++first));
++        else                 while (                !comp(pivot, *++first));
++
++        while (first < last) {
++            std::iter_swap(first, last);
++            while (comp(pivot, *--last));
++            while (!comp(pivot, *++first));
++        }
++
++        Iter pivot_pos = last;
++        *begin = PDQSORT_PREFER_MOVE(*pivot_pos);
++        *pivot_pos = PDQSORT_PREFER_MOVE(pivot);
++
++        return pivot_pos;
++    }
++
++
++    template<class Iter, class Compare, bool Branchless>
++    inline void pdqsort_loop(Iter begin, Iter end, Compare comp, int bad_allowed, bool leftmost = true) {
++        typedef typename std::iterator_traits<Iter>::difference_type diff_t;
++
++        // Use a while loop for tail recursion elimination.
++        while (true) {
++            diff_t size = end - begin;
++
++            // Insertion sort is faster for small arrays.
++            if (size < insertion_sort_threshold) {
++                if (leftmost) insertion_sort(begin, end, comp);
++                else unguarded_insertion_sort(begin, end, comp);
++                return;
++            }
++
++            // Choose pivot as median of 3 or pseudomedian of 9.
++            diff_t s2 = size / 2;
++            if (size > ninther_threshold) {
++                sort3(begin, begin + s2, end - 1, comp);
++                sort3(begin + 1, begin + (s2 - 1), end - 2, comp);
++                sort3(begin + 2, begin + (s2 + 1), end - 3, comp);
++                sort3(begin + (s2 - 1), begin + s2, begin + (s2 + 1), comp);
++                std::iter_swap(begin, begin + s2);
++            } else sort3(begin + s2, begin, end - 1, comp);
++
++            // If *(begin - 1) is the end of the right partition of a previous partition operation
++            // there is no element in [begin, end) that is smaller than *(begin - 1). Then if our
++            // pivot compares equal to *(begin - 1) we change strategy, putting equal elements in
++            // the left partition, greater elements in the right partition. We do not have to
++            // recurse on the left partition, since it's sorted (all equal).
++            if (!leftmost && !comp(*(begin - 1), *begin)) {
++                begin = partition_left(begin, end, comp) + 1;
++                continue;
++            }
++
++            // Partition and get results.
++            std::pair<Iter, bool> part_result =
++                Branchless ? partition_right_branchless(begin, end, comp)
++                           : partition_right(begin, end, comp);
++            Iter pivot_pos = part_result.first;
++            bool already_partitioned = part_result.second;
++
++            // Check for a highly unbalanced partition.
++            diff_t l_size = pivot_pos - begin;
++            diff_t r_size = end - (pivot_pos + 1);
++            bool highly_unbalanced = l_size < size / 8 || r_size < size / 8;
++
++            // If we got a highly unbalanced partition we shuffle elements to break many patterns.
++            if (highly_unbalanced) {
++                // If we had too many bad partitions, switch to heapsort to guarantee O(n log n).
++                if (--bad_allowed == 0) {
++                    std::make_heap(begin, end, comp);
++                    std::sort_heap(begin, end, comp);
++                    return;
++                }
++
++                if (l_size >= insertion_sort_threshold) {
++                    std::iter_swap(begin,             begin + l_size / 4);
++                    std::iter_swap(pivot_pos - 1, pivot_pos - l_size / 4);
++
++                    if (l_size > ninther_threshold) {
++                        std::iter_swap(begin + 1,         begin + (l_size / 4 + 1));
++                        std::iter_swap(begin + 2,         begin + (l_size / 4 + 2));
++                        std::iter_swap(pivot_pos - 2, pivot_pos - (l_size / 4 + 1));
++                        std::iter_swap(pivot_pos - 3, pivot_pos - (l_size / 4 + 2));
++                    }
++                }
++                
++                if (r_size >= insertion_sort_threshold) {
++                    std::iter_swap(pivot_pos + 1, pivot_pos + (1 + r_size / 4));
++                    std::iter_swap(end - 1,                   end - r_size / 4);
++                    
++                    if (r_size > ninther_threshold) {
++                        std::iter_swap(pivot_pos + 2, pivot_pos + (2 + r_size / 4));
++                        std::iter_swap(pivot_pos + 3, pivot_pos + (3 + r_size / 4));
++                        std::iter_swap(end - 2,             end - (1 + r_size / 4));
++                        std::iter_swap(end - 3,             end - (2 + r_size / 4));
++                    }
++                }
++            } else {
++                // If we were decently balanced and we tried to sort an already partitioned
++                // sequence try to use insertion sort.
++                if (already_partitioned && partial_insertion_sort(begin, pivot_pos, comp)
++                                        && partial_insertion_sort(pivot_pos + 1, end, comp)) return;
++            }
++                
++            // Sort the left partition first using recursion and do tail recursion elimination for
++            // the right-hand partition.
++            pdqsort_loop<Iter, Compare, Branchless>(begin, pivot_pos, comp, bad_allowed, leftmost);
++            begin = pivot_pos + 1;
++            leftmost = false;
++        }
++    }
++}
++
++
++template<class Iter, class Compare>
++inline void pdqsort(Iter begin, Iter end, Compare comp) {
++    if (begin == end) return;
++
++#if __cplusplus >= 201103L
++    pdqsort_detail::pdqsort_loop<Iter, Compare,
++        pdqsort_detail::is_default_compare<typename std::decay<Compare>::type>::value &&
++        std::is_arithmetic<typename std::iterator_traits<Iter>::value_type>::value>(
++        begin, end, comp, pdqsort_detail::log2(end - begin));
++#else
++    pdqsort_detail::pdqsort_loop<Iter, Compare, false>(
++        begin, end, comp, pdqsort_detail::log2(end - begin));
++#endif
++}
++
++template<class Iter>
++inline void pdqsort(Iter begin, Iter end) {
++    typedef typename std::iterator_traits<Iter>::value_type T;
++    pdqsort(begin, end, std::less<T>());
++}
++
++template<class Iter, class Compare>
++inline void pdqsort_branchless(Iter begin, Iter end, Compare comp) {
++    if (begin == end) return;
++    pdqsort_detail::pdqsort_loop<Iter, Compare, true>(
++        begin, end, comp, pdqsort_detail::log2(end - begin));
++}
++
++template<class Iter>
++inline void pdqsort_branchless(Iter begin, Iter end) {
++    typedef typename std::iterator_traits<Iter>::value_type T;
++    pdqsort_branchless(begin, end, std::less<T>());
++}
++
++
++#undef PDQSORT_PREFER_MOVE
++
++#endif
+diff --git a/wordcount.cpp b/wordcount.cpp
+index 504ecd8..b21cd22 100644
+--- a/wordcount.cpp
++++ b/wordcount.cpp
+@@ -1,5 +1,13 @@
+ #include "wordcount.hpp"
+ 
++#undef _GLIBCXX_DEBUG                // disable run-time bound checking, etc
++#pragma GCC optimize("Ofast,inline") // Ofast = O3,fast-math,allow-store-data-races,no-protect-parens
++
++#pragma GCC target("bmi,bmi2,lzcnt,popcnt")                      // bit manipulation
++#pragma GCC target("movbe")                                      // byte swap
++#pragma GCC target("aes,pclmul,rdrnd")                           // encryption
++#pragma GCC target("avx,avx2,f16c,fma,sse3,ssse3,sse4.1,sse4.2") // SIMD
++
+ #include <algorithm>
+ #include <fstream>
+ #include <iostream>
+@@ -14,13 +22,12 @@
+ 
+ #include "platform_specific.hpp"
+ #include "aligned_allocator.hpp"
++#include "pdqsort.h"
+ 
+ #define BUCKET_COUNT (4194304*2*2*4) // 2^22
+ 
+ #define __assume(cond) do { if (!(cond)) __builtin_unreachable(); } while (0)
+ 
+-#define SOLUTION
+-
+ #ifdef SOLUTION
+ 
+ uint32_t crcHash(const uint8_t* key, int64_t len)
+@@ -246,23 +253,146 @@ void read_words(const std::string& filePath)
+     } while (*buf);
+ }
+ 
++struct frequent_item_t
++{
++	__m256i val;
++	uint32_t count;
++};
++
++
++template <typename T>
++void do_sort(T* begin, T* end)
++{
++    pdqsort(begin, end, [](const T& lhs, const T& rhs)
++    {
++        if constexpr (std::is_same_v<T, frequent_item_t>)
++        {
++            if (lhs.count != rhs.count)
++                return lhs.count > rhs.count;
++        }
++
++        uint64_t* lhs_ptr = (uint64_t*)&lhs;
++        uint64_t* rhs_ptr = (uint64_t*)&rhs;
++
++        if (*(uint8_t*)lhs_ptr == 0 || *(uint8_t*)rhs_ptr == 0) // Pointer
++        {
++            bool invert = false;
++            if (*(uint8_t*)rhs_ptr == 0)
++            {
++                invert = true;
++                std::swap(lhs_ptr, rhs_ptr);
++            }
++
++            int lhs_len = lhs_ptr[0] >> 32;
++            int rhs_len;
++            uint64_t* lhs = (uint64_t*)lhs_ptr[1];
++            uint64_t* rhs;
++
++            if (*(uint8_t*)rhs_ptr == 0) // Pointer vs pointer
++            {
++                rhs_len = rhs_ptr[0] >> 32;
++                rhs = (uint64_t*)rhs_ptr[1];
++            }
++            else // Pointer vs inline
++            {
++                rhs_len = 32/sizeof(uint64_t);
++                rhs = rhs_ptr;
++            }
++
++			// First qword is stored in-place
++			for (int i = 0; i < 1; ++i)
++			{
++				if (__builtin_bswap64(lhs_ptr[i+2]) != __builtin_bswap64(*rhs))
++					return invert ? __builtin_bswap64(lhs_ptr[i+2]) > __builtin_bswap64(*rhs) :
++									__builtin_bswap64(lhs_ptr[i+2]) < __builtin_bswap64(*rhs);
++				++lhs; ++rhs; --rhs_len;
++			}
++
++            do
++            {
++                if (__builtin_bswap64(*lhs) != __builtin_bswap64(*rhs))
++                    return invert ? __builtin_bswap64(*lhs) > __builtin_bswap64(*rhs) :
++                                    __builtin_bswap64(*lhs) < __builtin_bswap64(*rhs);
++                ++lhs; ++rhs;
++            } while (rhs_len-- > 0);
++            return false;
++        }
++
++        for (int i = 0; i < 32/sizeof(uint64_t); ++i)
++        {
++            if (__builtin_bswap64(*lhs_ptr) != __builtin_bswap64(*rhs_ptr))
++                return __builtin_bswap64(*lhs_ptr) <     __builtin_bswap64(*rhs_ptr);
++            ++lhs_ptr; ++rhs_ptr;
++        }
++        return false;
++    });
++}
++
++#define MEDIUM_SORT_THRESHOLD 32
++
+ std::vector<WordCount> wordcount(std::string filePath) {
+-	std::vector<WordCount> mvec;
++	
++	std::vector<__m256i, aligned_allocator<__m256i, sizeof(__m256i)>> medium_sort_arrays[MEDIUM_SORT_THRESHOLD];
++	std::vector<frequent_item_t, aligned_allocator<frequent_item_t, sizeof(__m256i)>> frequent_items;
++	
++    std::vector<__m256i, aligned_allocator<__m256i, sizeof(__m256i)>> sort_buffers[256];
++	for (auto& vec : sort_buffers)
++		vec.reserve(80000);
++	
+ 	read_words(filePath);
+ 
+-	for (size_t i = 0; i < BUCKET_COUNT; ++i)
++	int total_entries = 0;
++    for (size_t i = 0; i < BUCKET_COUNT; ++i)
+     {
+         if (hash_table->slots[i].count == 0)
+             continue;
+ 
+-		__m256i node = hash_table->slots[i].node;
+-		uint32_t count = hash_table->slots[i].count;
++        if (hash_table->slots[i].count == 1)
++        {
++			__m256i node = _mm256_loadu_si256(&hash_table->slots[i].node);
++			
++            uint8_t c;
++            if (*(uint8_t*)&hash_table->slots[i].node == 0)
++                c = ((uint8_t*)&node)[2*sizeof(uint64_t)]; // first 8bytes are stored in place, grab the first char from it
++            else
++                c = *(uint8_t*)&hash_table->slots[i].node;
++
++            sort_buffers[c].push_back(node);
++			++total_entries;
++        }
++        else if (hash_table->slots[i].count <= MEDIUM_SORT_THRESHOLD)
++        {
++			__m256i node = _mm256_loadu_si256(&hash_table->slots[i].node);
++            medium_sort_arrays[hash_table->slots[i].count-1].push_back(node);
++			++total_entries;
++        }
++        else
++        {
++			__m256i node = _mm256_loadu_si256(&hash_table->slots[i].node);
++            frequent_items.push_back((frequent_item_t){node, hash_table->slots[i].count});
++			++total_entries;
++        }
++    }
++
++    for (int c = 0; c < 256; ++c)
++        do_sort(sort_buffers[c].data(), sort_buffers[c].data() + sort_buffers[c].size());
++
++    for (int i = 0; i < MEDIUM_SORT_THRESHOLD; ++i)
++    {
++        do_sort(medium_sort_arrays[i].data(), medium_sort_arrays[i].data() + medium_sort_arrays[i].size());
++    }
++    do_sort(frequent_items.data(), frequent_items.data() + frequent_items.size());
++
++	std::vector<WordCount> mvec;
++	mvec.reserve(total_entries);
++	
++	auto add_string = [&mvec](const __m256i& node, uint32_t count)
++	{
+ 		if (*(uint8_t*)&node == 0) // Pointer
+ 		{
+ 			const char* ptr = (const char*)node[1];
+ 			size_t len = node[3];
+ 			mvec.emplace_back(WordCount{(int)count, std::string(ptr, len)});
+-			//printf("%d : {%.*s}\n", count, len, ptr);
+ 		}
+ 		else // Pointer vs inline
+ 		{
+@@ -270,11 +400,21 @@ std::vector<WordCount> wordcount(std::string filePath) {
+ 			__m256i mask = _mm256_cmpeq_epi8(node, _mm256_set1_epi8(0));
+ 			int len = _mm_tzcnt_32(_mm256_movemask_epi8(mask));
+ 			mvec.emplace_back(WordCount{(int)count, std::string(ptr, len)});
+-			//printf("%d : {%.32s}\n", count, ptr);
+ 		}
++	};
++	
++	for (const auto& item : frequent_items)
++		add_string(item.val, item.count);
++    for (int i = MEDIUM_SORT_THRESHOLD-1; i >= 0; --i)
++    {
++		for (const auto& node : medium_sort_arrays[i])
++			add_string(node, i+1);
++    }
++    for (int i = 0; i < 256; ++i)
++    {
++		for (const auto& node : sort_buffers[i])
++			add_string(node, 1);
+     }
+-
+-	std::sort(mvec.begin(), mvec.end(), std::greater<WordCount>());
+ 	return mvec;
+ }
+ #else
+-- 
+2.34.1.windows.1
+
