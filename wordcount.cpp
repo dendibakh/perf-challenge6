@@ -17,11 +17,8 @@
 // 2. Your submission must be single-threaded, however feel free to implement
 // multi-threaded version (optional).
 
-#ifdef SOLUTION
-//
-// Your solution here.
-//
-#else
+#ifndef SOLUTION
+
 // Baseline solution.
 // Do not change it - you can use for quickly checking speedups
 // of your solution agains the baseline, see check_speedup.py
@@ -48,4 +45,5 @@ std::vector<WordCount> wordcount(std::string filePath) {
   std::sort(mvec.begin(), mvec.end(), std::greater<WordCount>());
   return mvec;
 }
+
 #endif
