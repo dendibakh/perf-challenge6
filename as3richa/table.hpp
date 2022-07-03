@@ -127,7 +127,7 @@ struct Table {
       }
     }
 
-    my_free(buffer, sizeof(Entry) * capacity);
+    my_free((void*)old_buffer, sizeof(Entry) * capacity);
   }
 };
 
