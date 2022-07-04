@@ -63,6 +63,7 @@ list(FILTER srcs EXCLUDE REGEX ".*validate.cpp$")
 add_executable(wordcount bench.cpp ${srcs} ${EXT_BENCHMARK_srcs})
 add_executable(validate_wordcount validate.cpp ${srcs} ${EXT_VALIDATE_srcs})
 add_executable(simple_wordcount simple_bench.cpp ${srcs} ${EXT_BENCHMARK_srcs})
+add_executable(baseline_wordcount baseline_bench.cpp ${srcs} ${EXT_BENCHMARK_srcs})
 
 # Check optional arguments
 if(NOT DEFINED CI)
