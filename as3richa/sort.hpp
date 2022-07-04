@@ -6,6 +6,11 @@
 
 #include "table.hpp"
 
+#ifdef _WIN32
+#include <cstdlib>
+#define __bswap_32(x) _byteswap_ulong(x)
+#endif
+
 inline std::vector<Entry> sort_entries(StringBuffer &string_buffer,
                                        Table &table) {
   string_buffer.append((const uint8_t *)"\x00\x00\x00", 4);

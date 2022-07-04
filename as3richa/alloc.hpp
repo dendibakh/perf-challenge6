@@ -6,6 +6,13 @@
 #ifdef __linux__
 #define USE_MMAP_HUGE_TLB
 #include <sys/mman.h>
+#define aligned_free(ptr) free(ptr)
+#endif
+
+#ifdef _WIN32
+#include <malloc.h>
+#define aligned_alloc(alloc_alignment, len) _aligned_malloc(len, alloc_alignment)
+#define aligned_free(ptr) _aligned_free(ptr)
 #endif
 
 static const size_t mmap_threshold = 2048;
@@ -47,7 +54,7 @@ inline void my_free(void *pointer, size_t len) {
     }
 #endif
 
-    free(pointer);
+    aligned_free(pointer);
 }
 
 #endif

@@ -32,12 +32,14 @@ struct StringBuffer {
       uint8_t *old_buffer = buffer;
       size_t old_capacity = capacity;
 
-      capacity = 2 * capacity;
+      capacity = 2 * capacity + len;
       buffer = (uint8_t *)my_alloc(capacity);
       memcpy(buffer, old_buffer, old_capacity);
 
       my_free(old_buffer, old_capacity);
     }
+
+    assert(this->len + len <= capacity);
 
     memcpy(this->buffer + this->len, data, len);
     this->len += len;

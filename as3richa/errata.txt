@@ -1,0 +1,4 @@
+* Pass in old_capacity rather than capacity to my_free in Table
+* Use _aligned_malloc and _aligned_free rather than aligned_alloc and free on Windows
+* Remove spurious #ifdef __linux__ wrapping the entirety of input.hpp
+* Use _byteswap_ulong rather than __bswap_32 on Windows

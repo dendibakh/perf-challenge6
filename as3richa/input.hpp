@@ -1,8 +1,6 @@
 #ifndef INPUT_H
 #define INPUT_H
 
-#ifdef __linux__
-
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -28,7 +26,7 @@ struct Input {
   }
 
   std::pair<uint8_t *, size_t> read_next() {
-    const ssize_t len = fread(buffer, 1, buffer_size, file);
+    const long len = fread(buffer, 1, buffer_size, file);
 
     if (len < 0) {
       abort();
@@ -37,7 +35,5 @@ struct Input {
     return std::make_pair(buffer, (size_t)len);
   }
 };
-
-#endif
 
 #endif
